@@ -1,0 +1,23 @@
+# dsh-secretary: 调度状态机 + 信息面板
+#
+# 职责边界：conversation-link 是唯一的通信层（conversation_list/send/status），
+# 本插件只记录「什么任务、何时催、汇报什么」，所有实际收发都经 conversation-link。
+#
+# 安装方式（二选一，勿重复挂载）：
+#   1) bundle 通道：dsh plugin --profile <name> add dsh-secretary
+#   2) 手工挂载：在 profile 的 cordis.patch.yml 里 insert 本行
+# 若 profile 已有本插件的手工挂载行，请先移除再切 bundle 通道，避免双挂载。
+#
+# 配置项（均可省略）：
+#   stateDir              状态目录；默认 $DSH_HOME/secretary（跟随进程环境变量）
+#   nonIntrusive          催办默认不打扰（dry-run + inject 静默送达），默认 true
+#   remindGraceMinutes    截止后的宽限分钟数，逾期 >= 宽限才触发催办，默认 60
+#   remindTemplate        催办文案模板（{subject}/{deadline}/{overdue} 占位符）
+#   auditLimit            审计环上限（条数），默认 500
+- insert:
+    - id: secretary
+      name: dsh-secretary
+      config:
+        nonIntrusive: true
+        remindGraceMinutes: 60
+        auditLimit: 500

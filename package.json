@@ -1,0 +1,56 @@
+{
+  "name": "dsh-secretary",
+  "version": "0.1.0",
+  "description": "DeepSeek 秘书插件：调度状态机 + 信息面板。会话台账 (secretary_roster)、任务委派跟踪 (secretary_assign，封装 dsh-conversation-link 的 conversation_send 并记录任务)、任务清单 (secretary_tasks)、进度看板 (secretary_board)、汇报 (secretary_report)、催办 (secretary_remind，不打扰模式)、行为规则 (secretary_policy)、交接 (secretary_handoff)。底层通信层复用 dsh-conversation-link，本插件只记录与转发：不越权、可审计。",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "plugin",
+    "secretary",
+    "scheduler",
+    "state-machine",
+    "task-tracking",
+    "dashboard"
+  ],
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./lib/state": "./lib/state.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "cordis.patch.yml",
+    "DESIGN.md",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "dsh-conversation-link": "^0.4.3"
+  },
+  "peerDependenciesMeta": {
+    "dsh-conversation-link": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  }
+}
