@@ -22,13 +22,18 @@ const tools = {
   },
 };
 const logger = { info() {}, warn() {}, error() {} };
-const rpcHandlers = new Map();
+const fetchRoutes = new Map();
 const connection = {
-  rpc: {
-    handle(channel, handler) { rpcHandlers.set(channel, handler); },
+  fetch: {
+    register(route) {
+      fetchRoutes.set(route.path, route);
+      return () => { fetchRoutes.delete(route.path); };
+    },
   },
 };
 const ctx = {
+  effect(cb) { return cb() ?? (() => {}); },
+  inject(names, cb) { cb(ctx); },
   get(name) {
     if (name === "tools") return tools;
     if (name === "logger") return logger;
@@ -80,19 +85,25 @@ check("交接(未完结任务)", handoff.moved.length === 2 && handoff.package.i
 const board = await tools.execute({ name: "secretary_board", agent, arguments: {} });
 check("看板 fail-open(无 conversation-link)", board.entries.length === 0 && board.summary.sessions === 0, board.unreachable.length + " unreachable");
 
-// ---- /secretary RPC（client 面板端点） ----
-check("RPC channel 注册", rpcHandlers.has("/secretary"));
-const rpc = (endpoint, args) => rpcHandlers.get("/secretary")(endpoint, { args: args || {} }, undefined);
-const overview1 = rpc("overview", {});
-check("RPC overview：任务统计", overview1.ok === true && overview1.value.taskStats.total === 2, overview1.value && overview1.value.taskStats);
-check("RPC overview：绑定为空", overview1.ok === true && overview1.value.binding === null);
-const bound = rpc("bind", { target: "amber-heron", name: "秘书会话" });
-check("RPC bind：绑定", bound.ok === true && bound.value.target === "amber-heron");
-const overview2 = rpc("overview", {});
-check("RPC overview：绑定已生效", overview2.value.binding.target === "amber-heron" && overview2.value.binding.name === "秘书会话");
-check("RPC 未知端点拒绝", rpc("nope", {}).ok === false);
-const unbound = rpc("unbind", {});
-check("RPC unbind：解绑", unbound.ok === true);
+// ---- /api/secretary 精确路由（client 面板端点，fetch.register 姿势） ----
+check("fetch 路由：3 条挂载", fetchRoutes.size === 3 && ["/api/secretary/overview", "/api/secretary/bind", "/api/secretary/unbind"].every(p => fetchRoutes.has(p)), [...fetchRoutes.keys()]);
+const call = async (path, envelope) => {
+  const route = fetchRoutes.get(path);
+  const req = { method: "POST", headers: { "content-type": "application/json" }, json: () => Promise.resolve(envelope) };
+  const res = await route.fetch(req);
+  return res.json();
+};
+const overview1 = await call("/api/secretary/overview", { type: "client-request", rpcId: "r1", method: "overview", payload: { args: {} } });
+check("overview：envelope + 统计", overview1.result.ok === true && overview1.result.value.taskStats.total === 2, overview1.result && overview1.result.value.taskStats);
+check("overview：绑定为空", overview1.result.value.binding === null);
+const bound = await call("/api/secretary/bind", { type: "client-request", rpcId: "r2", method: "bind", payload: { args: { target: "amber-heron", name: "秘书会话" } } });
+check("bind：绑定", bound.result.ok === true && bound.result.value.target === "amber-heron");
+const overview2 = await call("/api/secretary/overview", { type: "client-request", rpcId: "r3", method: "overview", payload: { args: {} } });
+check("overview：绑定已生效", overview2.result.value.binding.target === "amber-heron");
+const bad = await call("/api/secretary/bind", { type: "client-request", rpcId: "r4", method: "bind", payload: { args: {} } });
+check("bind：缺 target 报错", bad.result.ok === false);
+const unbound = await call("/api/secretary/unbind", { type: "client-request", rpcId: "r5", method: "unbind", payload: { args: {} } });
+check("unbind：解绑", unbound.result.ok === true && unbound.result.value === null);
 console.log("");
 console.log(failures === 0 ? "SMOKE ALL PASS ✅" : "SMOKE FAILURES: " + failures + " ❌");
 console.log("state file:", resolveStateFile({ stateDir: dir }));

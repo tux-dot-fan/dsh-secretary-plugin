@@ -23,7 +23,7 @@ window.__ModuleLoader__.load({
     /** 运行时注入的 sessions 服务（apply 时赋值），供面板跳转会话。 */
     let ctx_sessions = undefined;
 
-    const CHANNEL = "/secretary";
+    const CHANNEL = "/api/secretary";
 
     function rpcId() {
       try { return crypto.randomUUID(); } catch {
