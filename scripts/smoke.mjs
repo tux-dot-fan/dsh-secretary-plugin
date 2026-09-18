@@ -22,10 +22,17 @@ const tools = {
   },
 };
 const logger = { info() {}, warn() {}, error() {} };
+const rpcHandlers = new Map();
+const connection = {
+  rpc: {
+    handle(channel, handler) { rpcHandlers.set(channel, handler); },
+  },
+};
 const ctx = {
   get(name) {
     if (name === "tools") return tools;
     if (name === "logger") return logger;
+    if (name === "connection") return connection;
     return undefined;
   },
   tools,
@@ -73,8 +80,20 @@ check("交接(未完结任务)", handoff.moved.length === 2 && handoff.package.i
 const board = await tools.execute({ name: "secretary_board", agent, arguments: {} });
 check("看板 fail-open(无 conversation-link)", board.entries.length === 0 && board.summary.sessions === 0, board.unreachable.length + " unreachable");
 
+// ---- /secretary RPC（client 面板端点） ----
+check("RPC channel 注册", rpcHandlers.has("/secretary"));
+const rpc = (endpoint, args) => rpcHandlers.get("/secretary")(endpoint, { args: args || {} }, undefined);
+const overview1 = rpc("overview", {});
+check("RPC overview：任务统计", overview1.ok === true && overview1.value.taskStats.total === 2, overview1.value && overview1.value.taskStats);
+check("RPC overview：绑定为空", overview1.ok === true && overview1.value.binding === null);
+const bound = rpc("bind", { target: "amber-heron", name: "秘书会话" });
+check("RPC bind：绑定", bound.ok === true && bound.value.target === "amber-heron");
+const overview2 = rpc("overview", {});
+check("RPC overview：绑定已生效", overview2.value.binding.target === "amber-heron" && overview2.value.binding.name === "秘书会话");
+check("RPC 未知端点拒绝", rpc("nope", {}).ok === false);
+const unbound = rpc("unbind", {});
+check("RPC unbind：解绑", unbound.ok === true);
 console.log("");
 console.log(failures === 0 ? "SMOKE ALL PASS ✅" : "SMOKE FAILURES: " + failures + " ❌");
 console.log("state file:", resolveStateFile({ stateDir: dir }));
 process.exit(failures === 0 ? 0 : 1);
-

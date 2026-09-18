@@ -19,6 +19,7 @@
   "main": "./index.js",
   "exports": {
     ".": "./index.js",
+    "./client": "./client.js",
     "./lib/state": "./lib/state.js",
     "./package.json": "./package.json"
   },
@@ -27,11 +28,15 @@
     "lib",
     "cordis.patch.yml",
     "DESIGN.md",
-    "README.md"
+    "README.md",
+    "client.js"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
     }
   },
   "peerDependencies": {

@@ -16,14 +16,14 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { StateStore } from './lib/state.js'
+import { StateStore, isOverdue } from './lib/state.js'
 import { createTools } from './lib/tools.js'
 
 /** Cordis 插件名。 */
 export const name = "secretary"
 
 /** 挂载前必需的服务：工具注册表（注册 8 个工具）、agent 注册表（会话身份）。 */
-export const inject = ["tools", "agents"]
+export const inject = ["tools", "agents", "connection"]
 
 /** 展开路径开头的 ~/。 */
 function expandHome(value) {
@@ -84,6 +84,72 @@ export function apply(ctx, config = {}) {
   const definitions = createTools(ctx, store)
   for (const definition of definitions) {
     ctx.tools.register(definition)
+  }
+
+  // 浏览器端信息面板的数据/操作端点（web client 经 fetch 调用）：
+  //   overview  面板实时摘要（绑定/台账/任务统计/策略/逾期/outbox/审计）
+  //   bind      绑定/改绑秘书会话  {target, name?}
+  //   unbind    解绑
+  // client 侧不持有任何权限：只读摘要 + 显式绑定操作，全部写审计。
+  const registerRpc = (connection) => {
+    try {
+      connection.rpc.handle('/secretary', (endpoint, payload, _signal) => {
+        try {
+          const args = (payload && payload.args) || {}
+          if (endpoint === 'overview') {
+            const tasks = store.tasksAll()
+            const now = Date.now()
+            const open = tasks.filter(t => t.status === 'dispatched' || t.status === 'received' || t.status === 'pending_accept')
+            return { ok: true, value: {
+              binding: store.bindingGet() ?? null,
+              mountedAt: store.file,
+              rosterCount: store.rosterAll().length,
+              taskStats: {
+                total: tasks.length,
+                open: open.length,
+                overdue: open.filter(t => isOverdue(t, now)).length,
+                done: tasks.filter(t => t.status === 'done').length,
+                cancelled: tasks.filter(t => t.status === 'cancelled').length,
+                handedOff: tasks.filter(t => t.status === 'handed_off').length,
+              },
+              overdueTop: open
+                .filter(t => isOverdue(t, now))
+                .sort((a, b) => (Date.parse(a.deadline) || 0) - (Date.parse(b.deadline) || 0))
+                .slice(0, 10)
+                .map(t => ({ id: t.id, subject: t.subject, assignee: t.assignee, deadline: t.deadline })),
+              policies: store.policiesAll(),
+              outboxCount: store.outboxAll().length,
+              stateFile: store.file,
+            } }
+          }
+          if (endpoint === 'bind') {
+            const value = store.bindingSet({ target: args.target, name: args.name }, { by: 'client' })
+            if (value === undefined) return { ok: false, error: { message: '缺少 target（handle 或 sessionId）' } }
+            return { ok: true, value }
+          }
+          if (endpoint === 'unbind') {
+            store.bindingClear({ by: 'client' })
+            return { ok: true, value: null }
+          }
+          return { ok: false, error: { message: 'unknown endpoint: ' + String(endpoint) } }
+        } catch (error) {
+          logger?.warn?.('dsh-secretary: RPC ' + String(endpoint) + ' failed: ' + String(error))
+          return { ok: false, error: { message: String(error) } }
+        }
+      })
+      logger?.info?.('dsh-secretary: /secretary RPC channel ready')
+    } catch (error) {
+      // connection 服务未就绪/未挂载时面板退化为不可用，不影响工具本身
+      logger?.warn?.('dsh-secretary: 无法注册 /secretary RPC: ' + String(error))
+    }
+  }
+  try {
+    const connection = ctx.get('connection')
+    if (connection !== undefined && typeof connection.rpc?.handle === 'function') {
+      registerRpc(connection)
+    }
+  } catch (error) {
+    logger?.warn?.('dsh-secretary: connection 服务不可用，跳过 RPC: ' + String(error))
   }
 
   // 会话被删除 → 清理台账名片（与 conversation-link 忘掉链接同一时机）

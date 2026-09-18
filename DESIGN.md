@@ -62,7 +62,9 @@
 | `lib/tools.js` | 8 个工具定义（schema + execute） | 🟡 骨架可用：状态层完整，通信走接缝 |
 | `lib/transport.js` | 通信接缝：tools.execute 调 conversation_send；降级 outbox | 🟡 接缝就绪，结果解析待真机校准 |
 | `lib/board.js` | 看板聚合（conversation_list + conversation_status + roster 叠加） | 🟡 骨架可用，progress 字段待 phase-2 |
-| `test/state.test.mjs` | 状态层冒烟测试 | ✅ 已写（需在正常 DSH 环境 node --test） |
+| `client.js` | 浏览器端信息面板：设置页「秘书」区（台账/任务统计/逾期/策略只读摘要 + 秘书会话绑定 + 跳转按钮），经 fetch 调 host `/secretary` RPC | ✅ 完整（零构建闭包 factory） |
+| `test/state.test.mjs` | 状态层冒烟测试（10 例：含绑定），`npm test` | ✅ 通过 |
+| `scripts/smoke.mjs` | 最小宿主挂载冒烟（18 项：8 工具 + RPC 端点 + 降级路径），`npm run smoke` | ✅ 通过 |
 
 ## 4. 状态模型（state.json）
 
@@ -160,6 +162,18 @@
 - 状态文件单点：整写 + rename 原子替换；损坏文件按空状态处理并在挂载时告警，绝不炸挂载；
 - 规则只约束秘书自己：`secretary_policy` 仅允许 POLICY_DEFAULTS 已知键，且不约束任何会话。
 
+## 9bis. 信息面板与秘书会话绑定（browser client）
+
+- **面板**：`client.js`（零构建 closure factory，仿 dsh-skill-evolution）在设置页注册
+  `settings.section`（id=`dsh-secretary`，label=`秘书`），只读展示 host RPC `overview`
+  的摘要：绑定状态、台账条数、任务统计（进行中/逾期/完成/取消/交接）、逾期 Top10、
+  生效策略、状态文件路径；提供「刷新」。
+- **数据通道**：client `fetch(CHANNEL + "/" + endpoint)` → host `ctx.connection.rpc.handle("/secretary")`
+  （端点 overview / bind / unbind），与 skill-evolution 同协议；RPC 只暴露只读摘要与显式绑定操作。
+- **秘书会话绑定**：`state.binding = { target, name, updatedAt }`（handle 或 sessionId）。
+  面板输入框绑定；跳转用注入的 `ctx.sessions.open(target)`，环境不支持时降级复制 target 供侧栏粘贴。
+- **不越权守则保持不变**：client 无会话读写能力，全部变更在 host 侧落审计
+  （`secretary.bound` / `secretary.unbound`）。
 ## 10. 阶段计划
 
 | 阶段 | 内容 | 状态 |
@@ -167,7 +181,7 @@
 | P0 骨架 | 目录/package/cordis.patch.yml/模块骨架/DESIGN | ✅ 本次交付 |
 | P1 状态层收口 | 状态机补流转工具（secretary_accept/complete 之类的收口入口）、schema 字段审计 | ⏳ |
 | P2 通信真机校准 | transport 结果解析按 tools.execute 真实快照定型；remind 按 assignee 过滤；后台定时 tick（cordis timer）做无人值守催办 | ⏳ |
-| P3 信息面板增强 | board progress 归一化；settings.yaml 配置区（@deepseek-ai/dsh-settings，仿 tool-session）；与 dsh-agent-teams 的转发协作点 | ⏳ |
+| P3 信息面板 | 设置页「秘书」面板 + 会话绑定/跳转（client.js + /secretary RPC） | ✅ 已交付；待真机 UI 验证 |
 | P4 打磨 | 迁移 v2、UI 面板（可选）、README.en | ⏳ |
 
 ## 11. 验证方式

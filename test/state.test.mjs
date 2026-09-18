@@ -113,6 +113,21 @@ test("损坏的状态文件被忽略，不炸挂载", async () => {
   assert.equal(store.rosterGet("x").role, "r", "坏文件被修复后可继续写入");
 });
 
+
+test("秘书会话绑定：set/get/clear + 审计", () => {
+  const { store } = makeStore();
+  assert.equal(store.bindingGet(), undefined);
+  const bound = store.bindingSet({ target: "amber-heron", name: "秘书会话" }, { by: "client" });
+  assert.equal(bound.target, "amber-heron");
+  assert.ok(bound.updatedAt > 0);
+  assert.equal(store.bindingGet().name, "秘书会话");
+  assert.equal(store.recentAudit(10)[0].event, "secretary.bound");
+  store.bindingClear({ by: "client" });
+  assert.equal(store.bindingGet(), undefined);
+  // 非法绑定被拒
+  assert.equal(store.bindingSet({ target: "" }, { by: "client" }), undefined);
+});
+
 test("mintTaskId 同毫秒不撞", () => {
   const a = mintTaskId(123);
   const b = mintTaskId(123);
